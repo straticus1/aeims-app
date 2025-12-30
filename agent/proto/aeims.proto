@@ -1,0 +1,500 @@
+syntax = "proto3";
+
+package aeims.v1;
+
+option go_package = "github.com/afterdarksys/aeims-agent/pkg/api";
+
+// =============================================================================
+// AEIMS Agent Service
+// Advanced Engineering Infrastructure Management Services
+// =============================================================================
+
+service AeimsAgent {
+  // Health & Status
+  rpc GetStatus(StatusRequest) returns (StatusResponse);
+  rpc GetHealth(HealthRequest) returns (HealthResponse);
+
+  // Compute Operations
+  rpc ListInstances(ListInstancesRequest) returns (ListInstancesResponse);
+  rpc GetInstance(GetInstanceRequest) returns (Instance);
+  rpc ControlInstance(ControlInstanceRequest) returns (ControlInstanceResponse);
+
+  // Container Operations
+  rpc ListContainers(ListContainersRequest) returns (ListContainersResponse);
+  rpc GetContainer(GetContainerRequest) returns (Container);
+  rpc ControlContainer(ControlContainerRequest) returns (ControlContainerResponse);
+  rpc GetContainerLogs(GetContainerLogsRequest) returns (stream LogLine);
+
+  // DNS Operations
+  rpc ListDnsZones(ListDnsZonesRequest) returns (ListDnsZonesResponse);
+  rpc ListDnsRecords(ListDnsRecordsRequest) returns (ListDnsRecordsResponse);
+  rpc CreateDnsRecord(CreateDnsRecordRequest) returns (DnsRecord);
+  rpc UpdateDnsRecord(UpdateDnsRecordRequest) returns (DnsRecord);
+  rpc DeleteDnsRecord(DeleteDnsRecordRequest) returns (DeleteDnsRecordResponse);
+
+  // Secrets Operations
+  rpc ListSecrets(ListSecretsRequest) returns (ListSecretsResponse);
+  rpc GetSecretValue(GetSecretValueRequest) returns (SecretValue);
+  rpc SetSecretValue(SetSecretValueRequest) returns (SetSecretResponse);
+  rpc DeleteSecret(DeleteSecretRequest) returns (DeleteSecretResponse);
+
+  // Build Integration (connects to ads_builddaemon)
+  rpc TriggerBuild(TriggerBuildRequest) returns (stream BuildOutput);
+  rpc GetBuildStatus(GetBuildStatusRequest) returns (BuildStatus);
+
+  // Metrics
+  rpc GetMetrics(MetricsRequest) returns (MetricsResponse);
+}
+
+// =============================================================================
+// Common Types
+// =============================================================================
+
+enum Provider {
+  PROVIDER_UNSPECIFIED = 0;
+  PROVIDER_DOCKER = 1;
+  PROVIDER_AWS = 2;
+  PROVIDER_OCI = 3;
+  PROVIDER_GCP = 4;
+  PROVIDER_AZURE = 5;
+  PROVIDER_KUBERNETES = 6;
+}
+
+message Labels {
+  map<string, string> labels = 1;
+}
+
+// =============================================================================
+// Status & Health
+// =============================================================================
+
+message StatusRequest {}
+
+message StatusResponse {
+  string agent_id = 1;
+  string version = 2;
+  string hostname = 3;
+  string arch = 4;
+  string os = 5;
+  int64 uptime_seconds = 6;
+  repeated Provider enabled_providers = 7;
+  map<string, string> capabilities = 8;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_HEALTHY = 1;
+    STATUS_DEGRADED = 2;
+    STATUS_UNHEALTHY = 3;
+  }
+
+  Status status = 1;
+  repeated ComponentHealth components = 2;
+}
+
+message ComponentHealth {
+  string name = 1;
+  bool healthy = 2;
+  string message = 3;
+  int64 last_check_ms = 4;
+}
+
+// =============================================================================
+// Compute
+// =============================================================================
+
+enum InstanceState {
+  INSTANCE_STATE_UNSPECIFIED = 0;
+  INSTANCE_STATE_RUNNING = 1;
+  INSTANCE_STATE_STOPPED = 2;
+  INSTANCE_STATE_PENDING = 3;
+  INSTANCE_STATE_TERMINATED = 4;
+}
+
+message Instance {
+  string id = 1;
+  Provider provider = 2;
+  string provider_id = 3;
+  string name = 4;
+  InstanceState state = 5;
+  string instance_type = 6;
+  string region = 7;
+  string zone = 8;
+  string public_ip = 9;
+  string private_ip = 10;
+  int32 cpu_count = 11;
+  int32 memory_gb = 12;
+  map<string, string> tags = 13;
+  int64 created_at = 14;
+  int64 launched_at = 15;
+}
+
+message ListInstancesRequest {
+  Provider provider = 1;
+  string region = 2;
+  map<string, string> filters = 3;
+}
+
+message ListInstancesResponse {
+  repeated Instance instances = 1;
+}
+
+message GetInstanceRequest {
+  Provider provider = 1;
+  string instance_id = 2;
+}
+
+message ControlInstanceRequest {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_START = 1;
+    ACTION_STOP = 2;
+    ACTION_REBOOT = 3;
+    ACTION_TERMINATE = 4;
+  }
+
+  Provider provider = 1;
+  string instance_id = 2;
+  Action action = 3;
+}
+
+message ControlInstanceResponse {
+  bool success = 1;
+  string message = 2;
+  InstanceState new_state = 3;
+}
+
+// =============================================================================
+// Containers
+// =============================================================================
+
+enum ContainerState {
+  CONTAINER_STATE_UNSPECIFIED = 0;
+  CONTAINER_STATE_RUNNING = 1;
+  CONTAINER_STATE_STOPPED = 2;
+  CONTAINER_STATE_RESTARTING = 3;
+  CONTAINER_STATE_PAUSED = 4;
+  CONTAINER_STATE_EXITED = 5;
+  CONTAINER_STATE_DEAD = 6;
+}
+
+message Container {
+  string id = 1;
+  Provider provider = 2;
+  string provider_id = 3;
+  string name = 4;
+  string image = 5;
+  ContainerState state = 6;
+  string status = 7;
+  repeated PortMapping ports = 8;
+  map<string, string> labels = 9;
+  int64 created_at = 10;
+  int64 started_at = 11;
+  string host_id = 12;
+}
+
+message PortMapping {
+  int32 container_port = 1;
+  int32 host_port = 2;
+  string protocol = 3;
+}
+
+message ListContainersRequest {
+  Provider provider = 1;
+  bool all = 2; // Include stopped containers
+  map<string, string> filters = 3;
+}
+
+message ListContainersResponse {
+  repeated Container containers = 1;
+}
+
+message GetContainerRequest {
+  Provider provider = 1;
+  string container_id = 2;
+}
+
+message ControlContainerRequest {
+  enum Action {
+    ACTION_UNSPECIFIED = 0;
+    ACTION_START = 1;
+    ACTION_STOP = 2;
+    ACTION_RESTART = 3;
+    ACTION_PAUSE = 4;
+    ACTION_UNPAUSE = 5;
+    ACTION_KILL = 6;
+  }
+
+  Provider provider = 1;
+  string container_id = 2;
+  Action action = 3;
+  int32 timeout_seconds = 4;
+}
+
+message ControlContainerResponse {
+  bool success = 1;
+  string message = 2;
+  ContainerState new_state = 3;
+}
+
+message GetContainerLogsRequest {
+  Provider provider = 1;
+  string container_id = 2;
+  bool follow = 3;
+  int32 tail = 4;
+  bool timestamps = 5;
+  int64 since = 6;
+  int64 until = 7;
+}
+
+message LogLine {
+  int64 timestamp = 1;
+  string stream = 2; // stdout or stderr
+  string message = 3;
+}
+
+// =============================================================================
+// DNS
+// =============================================================================
+
+message DnsZone {
+  string id = 1;
+  Provider provider = 2;
+  string provider_id = 3;
+  string name = 4;
+  int32 record_count = 5;
+  bool is_private = 6;
+  repeated string name_servers = 7;
+  int64 created_at = 8;
+}
+
+enum DnsRecordType {
+  DNS_RECORD_TYPE_UNSPECIFIED = 0;
+  DNS_RECORD_TYPE_A = 1;
+  DNS_RECORD_TYPE_AAAA = 2;
+  DNS_RECORD_TYPE_CNAME = 3;
+  DNS_RECORD_TYPE_MX = 4;
+  DNS_RECORD_TYPE_TXT = 5;
+  DNS_RECORD_TYPE_NS = 6;
+  DNS_RECORD_TYPE_SOA = 7;
+  DNS_RECORD_TYPE_SRV = 8;
+  DNS_RECORD_TYPE_CAA = 9;
+}
+
+message DnsRecord {
+  string id = 1;
+  string zone_id = 2;
+  Provider provider = 3;
+  string provider_id = 4;
+  string name = 5;
+  DnsRecordType type = 6;
+  int32 ttl = 7;
+  repeated string values = 8;
+  int32 priority = 9; // For MX records
+}
+
+message ListDnsZonesRequest {
+  Provider provider = 1;
+}
+
+message ListDnsZonesResponse {
+  repeated DnsZone zones = 1;
+}
+
+message ListDnsRecordsRequest {
+  Provider provider = 1;
+  string zone_id = 2;
+  DnsRecordType type = 3;
+}
+
+message ListDnsRecordsResponse {
+  repeated DnsRecord records = 1;
+}
+
+message CreateDnsRecordRequest {
+  Provider provider = 1;
+  string zone_id = 2;
+  string name = 3;
+  DnsRecordType type = 4;
+  int32 ttl = 5;
+  repeated string values = 6;
+  int32 priority = 7;
+}
+
+message UpdateDnsRecordRequest {
+  Provider provider = 1;
+  string zone_id = 2;
+  string record_id = 3;
+  optional int32 ttl = 4;
+  repeated string values = 5;
+  optional int32 priority = 6;
+}
+
+message DeleteDnsRecordRequest {
+  Provider provider = 1;
+  string zone_id = 2;
+  string record_id = 3;
+}
+
+message DeleteDnsRecordResponse {
+  bool success = 1;
+}
+
+// =============================================================================
+// Secrets
+// =============================================================================
+
+enum SecretType {
+  SECRET_TYPE_UNSPECIFIED = 0;
+  SECRET_TYPE_API_KEY = 1;
+  SECRET_TYPE_DATABASE = 2;
+  SECRET_TYPE_JWT = 3;
+  SECRET_TYPE_OAUTH = 4;
+  SECRET_TYPE_SSH = 5;
+  SECRET_TYPE_CERTIFICATE = 6;
+  SECRET_TYPE_GENERIC = 7;
+}
+
+message Secret {
+  string id = 1;
+  string name = 2;
+  SecretType type = 3;
+  string description = 4;
+  Provider provider = 5;
+  repeated string tags = 6;
+  int32 version = 7;
+  int64 created_at = 8;
+  int64 updated_at = 9;
+  int64 expires_at = 10;
+}
+
+message SecretValue {
+  string id = 1;
+  string value = 2;
+  int32 version = 3;
+}
+
+message ListSecretsRequest {
+  Provider provider = 1;
+  SecretType type = 2;
+  repeated string tags = 3;
+}
+
+message ListSecretsResponse {
+  repeated Secret secrets = 1;
+}
+
+message GetSecretValueRequest {
+  Provider provider = 1;
+  string secret_id = 2;
+  int32 version = 3; // 0 for latest
+}
+
+message SetSecretValueRequest {
+  Provider provider = 1;
+  string name = 2;
+  string value = 3;
+  SecretType type = 4;
+  string description = 5;
+  repeated string tags = 6;
+  int64 expires_at = 7;
+}
+
+message SetSecretResponse {
+  string secret_id = 1;
+  int32 version = 2;
+}
+
+message DeleteSecretRequest {
+  Provider provider = 1;
+  string secret_id = 2;
+}
+
+message DeleteSecretResponse {
+  bool success = 1;
+}
+
+// =============================================================================
+// Build Integration
+// =============================================================================
+
+message TriggerBuildRequest {
+  string project = 1;
+  string target = 2;
+  string build_cmd = 3;
+  string pre_build = 4;
+  map<string, string> env = 5;
+  int32 timeout_seconds = 6;
+}
+
+message BuildOutput {
+  oneof payload {
+    LogLine log = 1;
+    BuildResult result = 2;
+    BuildProgress progress = 3;
+  }
+}
+
+message BuildResult {
+  bool success = 1;
+  int32 exit_code = 2;
+  int64 duration_ms = 3;
+  repeated string artifacts = 4;
+}
+
+message BuildProgress {
+  string stage = 1;
+  int32 percent = 2;
+  string message = 3;
+}
+
+message GetBuildStatusRequest {
+  string build_id = 1;
+}
+
+message BuildStatus {
+  string build_id = 1;
+  string project = 2;
+  string target = 3;
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_QUEUED = 1;
+    STATE_RUNNING = 2;
+    STATE_SUCCESS = 3;
+    STATE_FAILED = 4;
+    STATE_CANCELLED = 5;
+  }
+  State state = 4;
+  int64 started_at = 5;
+  int64 completed_at = 6;
+}
+
+// =============================================================================
+// Metrics
+// =============================================================================
+
+message MetricsRequest {
+  repeated string metric_names = 1;
+  int64 start_time = 2;
+  int64 end_time = 3;
+}
+
+message MetricsResponse {
+  repeated Metric metrics = 1;
+}
+
+message Metric {
+  string name = 1;
+  string type = 2;
+  string help = 3;
+  repeated MetricValue values = 4;
+}
+
+message MetricValue {
+  map<string, string> labels = 1;
+  double value = 2;
+  int64 timestamp = 3;
+}

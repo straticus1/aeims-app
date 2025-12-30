@@ -1,0 +1,81 @@
+# AEIMS Agent Configuration
+# Copy to /etc/aeims/agent.yaml and customize
+
+# Agent identification
+agent_id: "aeims-primary"
+name: "AEIMS Primary Agent"
+
+# Network ports
+grpc_port: 9850
+http_port: 9852
+metrics_port: 9851
+
+# Logging
+log_level: "info"  # debug, info, warn, error
+
+# Control plane connection (for multi-agent setups)
+control_plane:
+  enabled: false
+  url: "https://aeims.app"
+  token: "${AEIMS_AGENT_TOKEN}"
+  tls_verify: true
+
+# Provider configurations
+providers:
+  # Docker - Local container management
+  docker:
+    enabled: true
+    host: "unix:///var/run/docker.sock"
+    api_version: "1.43"
+    tls_verify: false
+
+  # AWS - EC2, ECS, Route53, etc.
+  aws:
+    enabled: false
+    region: "us-east-1"
+    # Uses ~/.aws/credentials or IAM role if not specified
+    # access_key_id: ""
+    # secret_access_key: ""
+    # profile: "default"
+
+  # Oracle Cloud Infrastructure
+  oci:
+    enabled: false
+    config_file: "~/.oci/config"
+    profile: "DEFAULT"
+    region: "us-ashburn-1"
+
+  # Kubernetes
+  kubernetes:
+    enabled: false
+    kubeconfig: "~/.kube/config"
+    context: ""
+    in_cluster: false
+
+# Build integration (ads_builddaemon)
+builds:
+  enabled: false
+  daemon_host: "localhost"
+  daemon_port: 9847
+  work_dir: "/var/lib/aeims/builds"
+  default_timeout: 600
+  exclude:
+    - ".git"
+    - "node_modules"
+    - "vendor"
+    - "target"
+    - "__pycache__"
+
+# Security settings
+security:
+  tls_enabled: false
+  # tls_cert_file: "/etc/aeims/tls/cert.pem"
+  # tls_key_file: "/etc/aeims/tls/key.pem"
+  # tls_ca_file: "/etc/aeims/tls/ca.pem"
+
+  auth_method: "none"  # none, token, mtls, ads_login
+  # auth_token: "${AEIMS_AUTH_TOKEN}"
+
+  # Local secrets vault
+  vault_enabled: false
+  vault_path: "/var/lib/aeims/vault"

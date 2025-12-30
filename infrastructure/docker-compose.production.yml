@@ -1,0 +1,159 @@
+version: '3.8'
+
+# AEIMS Production Docker Compose
+# Deploy: docker-compose -f docker-compose.production.yml up -d
+
+services:
+  # ==========================================================================
+  # Caddy Reverse Proxy - Handles SSL and routing
+  # ==========================================================================
+  caddy:
+    image: caddy:2-alpine
+    container_name: aeims-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - aeims-network
+    depends_on:
+      - aeims-web
+      - aeims-agent
+    healthcheck:
+      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ==========================================================================
+  # AEIMS Web Dashboard - Next.js Application
+  # ==========================================================================
+  aeims-web:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.web
+    container_name: aeims-web
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=${DATABASE_URL}
+      - NEXTAUTH_URL=https://aeims.app
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+    networks:
+      - aeims-network
+    depends_on:
+      - postgres
+      - redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 1G
+
+  # ==========================================================================
+  # AEIMS Agent - Go gRPC/HTTP Daemon
+  # ==========================================================================
+  aeims-agent:
+    build:
+      context: ..
+      dockerfile: infrastructure/Dockerfile.agent
+    container_name: aeims-agent
+    restart: unless-stopped
+    environment:
+      - AEIMS_GRPC_PORT=9850
+      - AEIMS_HTTP_PORT=9852
+      - AEIMS_METRICS_PORT=9851
+      - AEIMS_PROVIDERS_DOCKER_ENABLED=true
+      - AEIMS_PROVIDERS_DOCKER_HOST=unix:///var/run/docker.sock
+      - AEIMS_LOG_LEVEL=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - aeims_agent_data:/var/lib/aeims
+    ports:
+      - "9850:9850"   # gRPC
+      - "9851:9851"   # Metrics (Prometheus)
+      - "9852:9852"   # HTTP API
+    networks:
+      - aeims-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9852/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+  # ==========================================================================
+  # PostgreSQL Database
+  # ==========================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: aeims-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=aeims
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-aeims_secure_2024}
+      - POSTGRES_DB=aeims
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - aeims-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aeims"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+  # ==========================================================================
+  # Redis Cache/Sessions
+  # ==========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: aeims-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - aeims-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+
+networks:
+  aeims-network:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+  aeims_agent_data:

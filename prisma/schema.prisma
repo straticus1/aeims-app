@@ -1,0 +1,355 @@
+// AEIMS - Advanced Engineering Infrastructure Management Services
+// Database schema for multi-cloud resource management
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Organizations & Users
+// =============================================================================
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  users       OrganizationUser[]
+  agents      Agent[]
+  credentials ProviderCredential[]
+  resources   Resource[]
+  secrets     Secret[]
+  deployments Deployment[]
+  auditLogs   AuditLog[]
+
+  @@map("organizations")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String?
+  passwordHash  String?
+  avatarUrl     String?
+  emailVerified Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginAt   DateTime?
+
+  organizations OrganizationUser[]
+  apiTokens     ApiToken[]
+  deployments   Deployment[]
+  auditLogs     AuditLog[]
+
+  @@map("users")
+}
+
+model OrganizationUser {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  role           Role     @default(MEMBER)
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@map("organization_users")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+model ApiToken {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  tokenHash   String    @unique
+  lastUsedAt  DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_tokens")
+}
+
+// =============================================================================
+// AEIMS Agents
+// =============================================================================
+
+model Agent {
+  id             String      @id @default(cuid())
+  organizationId String
+  name           String
+  hostname       String?
+  arch           String?     // arm64, amd64
+  os             String?     // linux, darwin, windows
+  version        String?
+  publicIp       String?
+  privateIp      String?
+  status         AgentStatus @default(OFFLINE)
+  capabilities   Json?       // Enabled providers, features
+  lastSeenAt     DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resources    Resource[]
+
+  @@unique([organizationId, name])
+  @@map("agents")
+}
+
+enum AgentStatus {
+  ONLINE
+  OFFLINE
+  DEGRADED
+  MAINTENANCE
+}
+
+// =============================================================================
+// Cloud Provider Credentials
+// =============================================================================
+
+model ProviderCredential {
+  id             String        @id @default(cuid())
+  organizationId String
+  provider       CloudProvider
+  name           String
+  description    String?
+  region         String?
+  isDefault      Boolean       @default(false)
+  credentials    Json          // Encrypted credentials blob
+  isValid        Boolean       @default(true)
+  lastValidated  DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  resources    Resource[]
+
+  @@unique([organizationId, provider, name])
+  @@map("provider_credentials")
+}
+
+enum CloudProvider {
+  AWS
+  OCI
+  GCP
+  AZURE
+  DOCKER
+  KUBERNETES
+  CLOUDFLARE
+}
+
+// =============================================================================
+// Resources (Compute, DNS, Containers, etc.)
+// =============================================================================
+
+model Resource {
+  id             String        @id @default(cuid())
+  organizationId String
+  credentialId   String?
+  agentId        String?
+  provider       CloudProvider
+  type           ResourceType
+  providerId     String        // Provider-specific ID (instance-id, container-id, etc.)
+  name           String
+  region         String?
+  zone           String?
+  status         String?
+  state          Json?         // Provider-specific state data
+  metadata       Json?         // Additional metadata
+  tags           Json?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  credential   ProviderCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  agent        Agent?              @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  metrics      ResourceMetric[]
+
+  @@unique([organizationId, provider, providerId])
+  @@index([organizationId, type])
+  @@index([organizationId, provider])
+  @@map("resources")
+}
+
+enum ResourceType {
+  COMPUTE_INSTANCE
+  CONTAINER
+  CONTAINER_SERVICE
+  DNS_ZONE
+  DNS_RECORD
+  LOAD_BALANCER
+  DATABASE
+  STORAGE_BUCKET
+  VPC
+  SUBNET
+  SECURITY_GROUP
+}
+
+model ResourceMetric {
+  id         String   @id @default(cuid())
+  resourceId String
+  name       String   // cpu_usage, memory_usage, network_in, etc.
+  value      Float
+  unit       String?
+  timestamp  DateTime @default(now())
+
+  resource Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+
+  @@index([resourceId, name, timestamp])
+  @@map("resource_metrics")
+}
+
+// =============================================================================
+// Secrets Management
+// =============================================================================
+
+model Secret {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String
+  type           SecretType @default(GENERIC)
+  description    String?
+  valueEncrypted Bytes      // Encrypted secret value
+  version        Int        @default(1)
+  tags           String[]
+  expiresAt      DateTime?
+  rotationDays   Int?
+  lastRotatedAt  DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@map("secrets")
+}
+
+enum SecretType {
+  API_KEY
+  DATABASE
+  JWT
+  OAUTH
+  SSH_KEY
+  CERTIFICATE
+  GENERIC
+}
+
+// =============================================================================
+// Deployments
+// =============================================================================
+
+model Deployment {
+  id             String           @id @default(cuid())
+  organizationId String
+  initiatedById  String?
+  name           String
+  service        String
+  environment    String
+  version        String
+  previousVersion String?
+  status         DeploymentStatus @default(PENDING)
+  provider       CloudProvider
+  targetResources String[]
+  config         Json?
+  startedAt      DateTime         @default(now())
+  completedAt    DateTime?
+  duration       Int?             // seconds
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  initiatedBy  User?            @relation(fields: [initiatedById], references: [id], onDelete: SetNull)
+  logs         DeploymentLog[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, service])
+  @@map("deployments")
+}
+
+enum DeploymentStatus {
+  PENDING
+  IN_PROGRESS
+  SUCCESS
+  FAILED
+  ROLLED_BACK
+  CANCELLED
+}
+
+model DeploymentLog {
+  id           String   @id @default(cuid())
+  deploymentId String
+  level        String   // info, warning, error
+  message      String
+  metadata     Json?
+  timestamp    DateTime @default(now())
+
+  deployment Deployment @relation(fields: [deploymentId], references: [id], onDelete: Cascade)
+
+  @@index([deploymentId, timestamp])
+  @@map("deployment_logs")
+}
+
+// =============================================================================
+// Audit Logging
+// =============================================================================
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String?
+  action         String   // resource.create, deployment.start, etc.
+  resourceType   String?
+  resourceId     String?
+  details        Json?
+  ipAddress      String?
+  userAgent      String?
+  timestamp      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, timestamp])
+  @@index([organizationId, action])
+  @@map("audit_logs")
+}
+
+// =============================================================================
+// Cost Tracking
+// =============================================================================
+
+model CostRecord {
+  id             String        @id @default(cuid())
+  organizationId String
+  provider       CloudProvider
+  service        String
+  resourceId     String?
+  amount         Decimal       @db.Decimal(12, 4)
+  currency       String        @default("USD")
+  periodStart    DateTime
+  periodEnd      DateTime
+  metadata       Json?
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, provider, periodStart])
+  @@index([organizationId, periodStart])
+  @@map("cost_records")
+}

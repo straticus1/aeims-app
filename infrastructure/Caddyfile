@@ -1,0 +1,101 @@
+# AEIMS Caddyfile - Production Configuration
+# Automatic HTTPS with Let's Encrypt
+
+{
+    email admin@afterdarksys.com
+    acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+# Main dashboard
+aeims.app, www.aeims.app {
+    reverse_proxy aeims-web:3000
+
+    header {
+        # Security headers
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    }
+
+    log {
+        output file /data/logs/aeims-web.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+    }
+
+    encode gzip zstd
+}
+
+# API endpoint
+api.aeims.app {
+    reverse_proxy aeims-web:3000
+
+    header {
+        X-Content-Type-Options nosniff
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        Access-Control-Allow-Origin *
+        Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+        Access-Control-Allow-Headers "Authorization, Content-Type"
+    }
+
+    @options method OPTIONS
+    handle @options {
+        respond 204
+    }
+
+    log {
+        output file /data/logs/aeims-api.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+    }
+
+    encode gzip
+}
+
+# Agent gRPC/HTTP endpoints
+agent.aeims.app {
+    # HTTP API
+    handle /api/* {
+        reverse_proxy aeims-agent:9852
+    }
+
+    # Health endpoint
+    handle /health {
+        reverse_proxy aeims-agent:9852
+    }
+
+    # Status endpoint
+    handle /status {
+        reverse_proxy aeims-agent:9852
+    }
+
+    # Metrics (Prometheus)
+    handle /metrics {
+        reverse_proxy aeims-agent:9851
+    }
+
+    # gRPC proxy
+    handle {
+        reverse_proxy aeims-agent:9850 {
+            transport http {
+                versions h2c
+            }
+        }
+    }
+
+    header {
+        X-Content-Type-Options nosniff
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+
+    log {
+        output file /data/logs/aeims-agent.log {
+            roll_size 50mb
+            roll_keep 5
+        }
+    }
+}

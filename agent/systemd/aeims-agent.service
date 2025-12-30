@@ -1,0 +1,41 @@
+[Unit]
+Description=AEIMS Agent - Advanced Engineering Infrastructure Management Services
+Documentation=https://aeims.app/docs
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=simple
+User=aeims
+Group=aeims
+ExecStart=/usr/local/bin/aeims-agent --config /etc/aeims/agent.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/aeims /var/log/aeims
+
+# Allow docker socket access
+SupplementaryGroups=docker
+
+# Environment
+Environment="AEIMS_LOG_LEVEL=info"
+EnvironmentFile=-/etc/aeims/agent.env
+
+# Limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aeims-agent
+
+[Install]
+WantedBy=multi-user.target
