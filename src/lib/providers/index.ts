@@ -9,10 +9,12 @@ import type {
 } from './base';
 import { AWSComputeProvider, AWSContainerProvider, AWSDnsProvider } from './aws';
 import { DNSScienceProvider, type DNSScienceCredentials } from './dnsscience';
+import { ADSBuildProvider, type IBuildProvider } from './adsbuild';
 
 export * from './base';
 export * from './aws';
 export * from './dnsscience';
+export * from './adsbuild';
 
 // =============================================================================
 // Provider Factory
@@ -28,6 +30,7 @@ export class ProviderRegistry {
   private containerProviders: Map<string, IContainerProvider> = new Map();
   private dnsProviders: Map<string, IDnsProvider> = new Map();
   private dnsScienceProviders: Map<string, DNSScienceProvider> = new Map();
+  private buildProviders: Map<string, IBuildProvider> = new Map();
 
   // Register a provider credential set
   registerProvider(options: ProviderOptions): void {
@@ -67,6 +70,27 @@ export class ProviderRegistry {
   registerDNSScienceProvider(credentials: DNSScienceCredentials): void {
     const key = `dnsscience:${credentials.apiKeyId}`;
     this.dnsScienceProviders.set(key, new DNSScienceProvider(credentials));
+  }
+
+  // Register ADS Build provider
+  registerBuildProvider(credentials: ProviderCredentials): void {
+    const key = `adsbuild:${credentials.id || 'default'}`;
+    this.buildProviders.set(key, new ADSBuildProvider(credentials));
+  }
+
+  // Get build provider
+  getBuildProvider(keyId?: string): IBuildProvider | undefined {
+    if (keyId) {
+      return this.buildProviders.get(`adsbuild:${keyId}`);
+    }
+    // Return first registered provider if no key specified
+    const providers = Array.from(this.buildProviders.values());
+    return providers[0];
+  }
+
+  // Get all build providers
+  getBuildProviders(): IBuildProvider[] {
+    return Array.from(this.buildProviders.values());
   }
 
   // Get DNS Science provider

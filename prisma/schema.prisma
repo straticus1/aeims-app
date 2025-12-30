@@ -23,13 +23,16 @@ model Organization {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  users       OrganizationUser[]
-  agents      Agent[]
-  credentials ProviderCredential[]
-  resources   Resource[]
-  secrets     Secret[]
-  deployments Deployment[]
-  auditLogs   AuditLog[]
+  users         OrganizationUser[]
+  agents        Agent[]
+  credentials   ProviderCredential[]
+  resources     Resource[]
+  secrets       Secret[]
+  deployments   Deployment[]
+  auditLogs     AuditLog[]
+  buildHosts    BuildHost[]
+  buildProjects BuildProject[]
+  jenkinsAgents JenkinsAgent[]
 
   @@map("organizations")
 }
@@ -50,6 +53,7 @@ model User {
   apiTokens     ApiToken[]
   deployments   Deployment[]
   auditLogs     AuditLog[]
+  buildJobs     BuildJob[]
 
   @@map("users")
 }
@@ -352,4 +356,166 @@ model CostRecord {
   @@index([organizationId, provider, periodStart])
   @@index([organizationId, periodStart])
   @@map("cost_records")
+}
+
+// =============================================================================
+// Build Services (ADS Build / Jenkins Integration)
+// =============================================================================
+
+model BuildHost {
+  id             String          @id @default(cuid())
+  organizationId String
+  name           String
+  address        String
+  port           Int             @default(9847)
+  architecture   Architecture
+  status         BuildHostStatus @default(OFFLINE)
+  maxJobs        Int             @default(2)
+  labels         String[]
+  apiKeyHash     String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projects     BuildProject[] @relation("HostProjects")
+  jobs         BuildJob[]
+
+  @@unique([organizationId, name])
+  @@map("build_hosts")
+}
+
+enum Architecture {
+  ARM64
+  AMD64
+}
+
+enum BuildHostStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+  MAINTENANCE
+}
+
+model BuildProject {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  description    String?
+  gitRepo        String?
+  defaultBranch  String   @default("main")
+  preBuild       String?
+  postBuild      String?
+  artifacts      String[]
+  environment    Json?
+  webhookEnabled Boolean  @default(false)
+  webhookSecret  String?
+  lastBuildAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targets      BuildTarget[]
+  jobs         BuildJob[]
+  hosts        BuildHost[]  @relation("HostProjects")
+
+  @@unique([organizationId, name])
+  @@map("build_projects")
+}
+
+model BuildTarget {
+  id          String       @id @default(cuid())
+  projectId   String
+  architecture Architecture
+  hostName    String
+  buildCmd    String
+  environment Json?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  project BuildProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, architecture])
+  @@map("build_targets")
+}
+
+model BuildJob {
+  id             String        @id @default(cuid())
+  organizationId String
+  projectId      String
+  hostId         String?
+  initiatedById  String?
+  target         Architecture
+  status         BuildJobStatus @default(PENDING)
+  buildCmd       String?
+  preBuild       String?
+  postBuild      String?
+  gitBranch      String?
+  gitTag         String?
+  gitCommit      String?
+  environment    Json?
+  artifacts      String[]
+  exitCode       Int?
+  durationMs     Int?
+  errorMessage   String?
+  queuedAt       DateTime      @default(now())
+  startedAt      DateTime?
+  completedAt    DateTime?
+
+  project     BuildProject  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  host        BuildHost?    @relation(fields: [hostId], references: [id], onDelete: SetNull)
+  initiatedBy User?         @relation(fields: [initiatedById], references: [id], onDelete: SetNull)
+  logs        BuildLog[]
+
+  @@index([organizationId, status])
+  @@index([projectId, status])
+  @@map("build_jobs")
+}
+
+enum BuildJobStatus {
+  PENDING
+  QUEUED
+  RUNNING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+model BuildLog {
+  id        String   @id @default(cuid())
+  jobId     String
+  level     String   @default("info")
+  message   String
+  timestamp DateTime @default(now())
+
+  job BuildJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId, timestamp])
+  @@map("build_logs")
+}
+
+model JenkinsAgent {
+  id             String              @id @default(cuid())
+  organizationId String
+  name           String
+  jenkinsUrl     String
+  secretHash     String
+  architecture   Architecture
+  executors      Int                 @default(1)
+  labels         String[]
+  status         JenkinsAgentStatus  @default(DISCONNECTED)
+  lastSeenAt     DateTime?
+  registeredAt   DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, name])
+  @@map("jenkins_agents")
+}
+
+enum JenkinsAgentStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
 }
