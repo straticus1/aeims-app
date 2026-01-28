@@ -16,6 +16,11 @@ function getDNSScienceProvider() {
   const credentials: DNSScienceCredentials = {
     provider: 'oci',
     id: process.env.DNSSCIENCE_API_KEY_ID || '',
+    name: 'DNS Science Default',
+    isActive: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    credentials: {},
     apiKey: process.env.DNSSCIENCE_API_KEY || '',
     apiKeyId: process.env.DNSSCIENCE_API_KEY_ID || '',
     endpoint: process.env.DNSSCIENCE_ENDPOINT || 'http://localhost:5000',

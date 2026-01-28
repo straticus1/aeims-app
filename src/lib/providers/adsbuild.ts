@@ -141,8 +141,8 @@ export class ADSBuildProvider extends BaseProvider implements IBuildProvider {
 
   constructor(credentials: ProviderCredentials, region?: string) {
     super('ADS_BUILD' as CloudProvider, credentials, region);
-    this.apiUrl = credentials.apiUrl || 'https://api.computeapi.io/api/v2';
-    this.apiKey = credentials.apiKey || '';
+    this.apiUrl = credentials.credentials.apiUrl || 'https://api.computeapi.io/api/v2';
+    this.apiKey = credentials.credentials.apiKey || '';
   }
 
   async testConnection(): Promise<boolean> {
