@@ -5,30 +5,34 @@ version: '3.8'
 
 services:
   # ==========================================================================
-  # Caddy Reverse Proxy - Handles SSL and routing
+  # Caddy Reverse Proxy - DISABLED (using system nginx instead)
   # ==========================================================================
-  caddy:
-    image: caddy:2-alpine
-    container_name: aeims-caddy
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"  # HTTP/3
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy_data:/data
-      - caddy_config:/config
-    networks:
-      - aeims-network
-    depends_on:
-      - aeims-web
-      - aeims-agent
-    healthcheck:
-      test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+  # caddy:
+  #   image: caddy:2-alpine
+  #   container_name: aeims-caddy
+  #   restart: unless-stopped
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #     - "443:443/udp"  # HTTP/3
+  #   volumes:
+  #     - ./Caddyfile:/etc/caddy/Caddyfile:ro
+  #     - caddy_data:/data
+  #     - caddy_config:/config
+  #   networks:
+  #     - aeims-network
+  #   depends_on:
+  #     - aeims-web
+  #   healthcheck:
+  #     test: ["CMD", "caddy", "validate", "--config", "/etc/caddy/Caddyfile"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.25'
+  #         memory: 128M
 
   # ==========================================================================
   # AEIMS Web Dashboard - Next.js Application
@@ -39,6 +43,8 @@ services:
       dockerfile: infrastructure/Dockerfile.web
     container_name: aeims-web
     restart: unless-stopped
+    ports:
+      - "19000:3000"
     environment:
       - NODE_ENV=production
       - DATABASE_URL=${DATABASE_URL}
@@ -50,7 +56,7 @@ services:
       - postgres
       - redis
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -58,44 +64,44 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 1G
+          cpus: '0.5'
+          memory: 512M
 
   # ==========================================================================
-  # AEIMS Agent - Go gRPC/HTTP Daemon
+  # AEIMS Agent - Go gRPC/HTTP Daemon (DISABLED - incomplete)
   # ==========================================================================
-  aeims-agent:
-    build:
-      context: ..
-      dockerfile: infrastructure/Dockerfile.agent
-    container_name: aeims-agent
-    restart: unless-stopped
-    environment:
-      - AEIMS_GRPC_PORT=9850
-      - AEIMS_HTTP_PORT=9852
-      - AEIMS_METRICS_PORT=9851
-      - AEIMS_PROVIDERS_DOCKER_ENABLED=true
-      - AEIMS_PROVIDERS_DOCKER_HOST=unix:///var/run/docker.sock
-      - AEIMS_LOG_LEVEL=info
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - aeims_agent_data:/var/lib/aeims
-    ports:
-      - "9850:9850"   # gRPC
-      - "9851:9851"   # Metrics (Prometheus)
-      - "9852:9852"   # HTTP API
-    networks:
-      - aeims-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9852/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
+  # aeims-agent:
+  #   build:
+  #     context: ..
+  #     dockerfile: infrastructure/Dockerfile.agent
+  #   container_name: aeims-agent
+  #   restart: unless-stopped
+  #   environment:
+  #     - AEIMS_GRPC_PORT=9850
+  #     - AEIMS_HTTP_PORT=9852
+  #     - AEIMS_METRICS_PORT=9851
+  #     - AEIMS_PROVIDERS_DOCKER_ENABLED=true
+  #     - AEIMS_PROVIDERS_DOCKER_HOST=unix:///var/run/docker.sock
+  #     - AEIMS_LOG_LEVEL=info
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock:ro
+  #     - aeims_agent_data:/var/lib/aeims
+  #   ports:
+  #     - "9850:9850"   # gRPC
+  #     - "9851:9851"   # Metrics (Prometheus)
+  #     - "9852:9852"   # HTTP API
+  #   networks:
+  #     - aeims-network
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-f", "http://localhost:9852/health"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 256M
 
   # ==========================================================================
   # PostgreSQL Database
@@ -121,8 +127,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '0.5'
+          memory: 512M
 
   # ==========================================================================
   # Redis Cache/Sessions
@@ -131,7 +137,7 @@ services:
     image: redis:7-alpine
     container_name: aeims-redis
     restart: unless-stopped
-    command: redis-server --maxmemory 512mb --maxmemory-policy allkeys-lru
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
@@ -144,8 +150,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '0.25'
+          memory: 128M
 
 networks:
   aeims-network:

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { exchangeCodeForTokens, getUserInfo } from '@/lib/auth/oauth'
+import { exchangeCodeForTokens, getUserInfo, verifyIdToken } from '@/lib/auth/oauth'
 import { createSession } from '@/lib/auth/session'
 import { cookies } from 'next/headers'
 import prisma from '@/lib/prisma'
@@ -40,6 +40,9 @@ export async function GET(req: NextRequest) {
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code)
+
+    // Verify ID token signature (CRITICAL: prevents token forgery)
+    await verifyIdToken(tokens.id_token)
 
     // Get user info from Authentik
     const userInfo = await getUserInfo(tokens.access_token)
