@@ -8,8 +8,21 @@ export const redis =
     url: process.env.REDIS_URL || 'redis://localhost:6379',
   })
 
-if (!redis.isOpen) {
-  redis.connect().catch(console.error)
+// Only connect at runtime, not during build
+if (typeof window === 'undefined' && process.env.NODE_ENV !== 'production') {
+  if (!redis.isOpen) {
+    redis.connect().catch(console.error)
+  }
+}
+
+// Connect in production on first use
+let connecting = false
+export async function ensureRedisConnected() {
+  if (!redis.isOpen && !connecting) {
+    connecting = true
+    await redis.connect()
+    connecting = false
+  }
 }
 
 if (process.env.NODE_ENV !== 'production') globalForRedis.redis = redis

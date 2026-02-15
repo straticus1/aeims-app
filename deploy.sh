@@ -48,9 +48,17 @@ sync_files() {
         --exclude='.next' \
         --exclude='.env.local' \
         --exclude='*.log' \
+        --exclude='infrastructure/caddy_data' \
         -e "ssh -i $SSH_KEY" \
         "$PROJECT_DIR/" \
-        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
+        "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/" || {
+        # rsync exit code 23 = partial transfer due to permission errors (non-fatal)
+        if [ $? -eq 23 ]; then
+            warn "Some files could not be synced (permission issues), continuing..."
+        else
+            error "File sync failed"
+        fi
+    }
 
     log "Files synced"
 }
@@ -106,14 +114,14 @@ cd "$DEPLOY_DIR/infrastructure"
 # Ensure logs directory exists for Caddy
 sudo mkdir -p /opt/aeims/infrastructure/caddy_data/logs
 
-docker-compose -f docker-compose.production.yml pull
-docker-compose -f docker-compose.production.yml up -d --build
+docker compose -f docker-compose.production.yml pull
+docker compose -f docker-compose.production.yml up -d --build
 
 echo "=== Waiting for services to start ==="
 sleep 10
 
 echo "=== Checking service status ==="
-docker-compose -f docker-compose.production.yml ps
+docker compose -f docker-compose.production.yml ps
 
 echo "=== Deployment complete ==="
 REMOTE_SCRIPT
@@ -131,8 +139,8 @@ cd /opt/aeims
 npm ci --only=production
 npm run build
 cd infrastructure
-docker-compose -f docker-compose.production.yml up -d --build aeims-web
-docker-compose -f docker-compose.production.yml restart caddy
+docker compose -f docker-compose.production.yml up -d --build aeims-web
+docker compose -f docker-compose.production.yml restart caddy
 REMOTE_SCRIPT
 
     log "Quick deploy complete"
@@ -144,7 +152,7 @@ check_status() {
     ssh -i "$SSH_KEY" "${REMOTE_USER}@${REMOTE_HOST}" bash << 'REMOTE_SCRIPT'
 cd /opt/aeims/infrastructure
 echo "=== Docker Compose Status ==="
-docker-compose -f docker-compose.production.yml ps
+docker compose -f docker-compose.production.yml ps
 
 echo ""
 echo "=== Container Logs (last 20 lines each) ==="
@@ -161,7 +169,7 @@ view_logs() {
     local service="${1:-aeims-web}"
     log "Viewing logs for $service..."
     ssh -i "$SSH_KEY" "${REMOTE_USER}@${REMOTE_HOST}" \
-        "cd /opt/aeims/infrastructure && docker-compose -f docker-compose.production.yml logs -f $service"
+        "cd /opt/aeims/infrastructure && docker compose -f docker-compose.production.yml logs -f $service"
 }
 
 # Main

@@ -12,6 +12,8 @@ export type CloudProvider =
   // DNS/CDN
   | 'cloudflare'
   | 'route53'
+  | 'darkapi'     // DarkAPI threat intelligence
+  | 'dnsscience'  // DNSScience DNS management
   // Serverless Database
   | 'neon'        // Serverless Postgres
   | 'planetscale' // Serverless MySQL
@@ -23,6 +25,8 @@ export type CloudProvider =
   | 'together'    // Together.ai inference
   | 'replicate'   // Replicate ML models
   | 'modal'       // Modal serverless GPU
+  // Build Services
+  | 'adsbuild'    // ADS Build Services
   // Edge/CDN
   | 'vercel'      // Vercel Edge
   | 'netlify'     // Netlify
@@ -226,6 +230,26 @@ export const PROVIDER_CAPABILITIES: Record<CloudProvider, ProviderCapabilities> 
     provider: 'backblaze',
     categories: ['storage'],
     features: { storage: true },
+    pricing: { model: 'pay-as-you-go', currency: 'USD' },
+  },
+
+  // After Dark Systems Services
+  darkapi: {
+    provider: 'darkapi',
+    categories: ['dns'],
+    features: { dns: true },
+    pricing: { model: 'pay-as-you-go', currency: 'USD' },
+  },
+  dnsscience: {
+    provider: 'dnsscience',
+    categories: ['dns'],
+    features: { dns: true },
+    pricing: { model: 'pay-as-you-go', currency: 'USD' },
+  },
+  adsbuild: {
+    provider: 'adsbuild',
+    categories: ['container'],
+    features: { containers: true },
     pricing: { model: 'pay-as-you-go', currency: 'USD' },
   },
 };

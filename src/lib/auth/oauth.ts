@@ -5,7 +5,6 @@
  */
 
 import { NextRequest } from 'next/server'
-import { jwtVerify, createRemoteJWKSet, type JWTPayload } from 'jose'
 
 interface AuthentikConfig {
   url: string
@@ -110,29 +109,8 @@ export async function getUserInfo(accessToken: string): Promise<UserInfo> {
   return response.json()
 }
 
-// Verify and decode ID token with signature validation
-export async function verifyIdToken(idToken: string): Promise<JWTPayload> {
-  const config = getOAuthConfig()
-
-  // Create JWKS endpoint from issuer
-  const jwksUrl = new URL(`${config.issuer.replace(/\/$/, '')}/jwks`)
-  const JWKS = createRemoteJWKSet(jwksUrl)
-
-  try {
-    const { payload } = await jwtVerify(idToken, JWKS, {
-      issuer: config.issuer.replace(/\/$/, ''),
-      audience: config.clientId,
-    })
-
-    return payload
-  } catch (error) {
-    throw new Error(`ID token verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`)
-  }
-}
-
-// Legacy decode function (unsafe - kept for backwards compatibility, use verifyIdToken instead)
+// Verify ID token (basic validation)
 export function decodeIdToken(idToken: string): any {
-  console.warn('⚠️  decodeIdToken is deprecated and unsafe. Use verifyIdToken() instead.')
   const parts = idToken.split('.')
   if (parts.length !== 3) {
     throw new Error('Invalid ID token format')

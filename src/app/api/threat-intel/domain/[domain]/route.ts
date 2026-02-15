@@ -7,9 +7,9 @@ const DARKAPI_KEY = process.env.DARKAPI_KEY || '';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { domain: string } }
+  { params }: { params: Promise<{ domain: string }> }
 ) {
-  const { domain } = params;
+  const { domain } = await params;
 
   try {
     const results: Record<string, unknown> = {

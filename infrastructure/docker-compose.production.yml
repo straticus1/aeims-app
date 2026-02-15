@@ -45,11 +45,10 @@ services:
     restart: unless-stopped
     ports:
       - "19000:3000"
+    env_file:
+      - ../.env.production
     environment:
       - NODE_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - NEXTAUTH_URL=https://aeims.app
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
     networks:
       - aeims-network
     depends_on:

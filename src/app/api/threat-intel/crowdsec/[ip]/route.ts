@@ -5,9 +5,9 @@ const DNSSCIENCE_API = process.env.DNSSCIENCE_API_URL || 'https://api.dnsscience
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { ip: string } }
+  { params }: { params: Promise<{ ip: string }> }
 ) {
-  const { ip } = params;
+  const { ip } = await params;
 
   try {
     const response = await fetch(

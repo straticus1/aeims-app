@@ -7,9 +7,9 @@ const DARKAPI_KEY = process.env.DARKAPI_KEY || '';
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { ip: string } }
+  { params }: { params: Promise<{ ip: string }> }
 ) {
-  const { ip } = params;
+  const { ip } = await params;
 
   try {
     // Aggregate from multiple sources

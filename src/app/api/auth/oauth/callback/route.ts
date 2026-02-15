@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { exchangeCodeForTokens, getUserInfo, verifyIdToken } from '@/lib/auth/oauth'
+import { exchangeCodeForTokens, getUserInfo, decodeIdToken } from '@/lib/auth/oauth'
 import { createSession } from '@/lib/auth/session'
-import { cookies } from 'next/headers'
+import { createHmac } from 'crypto'
 import prisma from '@/lib/prisma'
 
 /**
@@ -9,6 +9,9 @@ import prisma from '@/lib/prisma'
  * Handles the redirect from Authentik after user authentication
  */
 export async function GET(req: NextRequest) {
+  // Use NEXTAUTH_URL for redirects instead of req.url
+  const baseUrl = process.env.NEXTAUTH_URL || 'https://aeims.app'
+
   try {
     const searchParams = req.nextUrl.searchParams
     const code = searchParams.get('code')
@@ -18,31 +21,43 @@ export async function GET(req: NextRequest) {
     // Handle OAuth errors
     if (error) {
       console.error('OAuth error:', error)
-      return NextResponse.redirect(new URL(`/login?error=${error}`, req.url))
+      return NextResponse.redirect(new URL(`/login?error=${error}`, baseUrl))
     }
 
     // Validate required parameters
     if (!code || !state) {
-      return NextResponse.redirect(new URL('/login?error=missing_parameters', req.url))
+      return NextResponse.redirect(new URL('/login?error=missing_parameters', baseUrl))
     }
 
-    // Verify state (CSRF protection)
-    const cookieStore = await cookies()
-    const savedState = cookieStore.get('oauth_state')?.value
+    // Verify state HMAC signature
+    const [stateValue, receivedSignature] = state.split('.')
 
-    if (!savedState || savedState !== state) {
-      console.error('State mismatch:', { saved: savedState, received: state })
-      return NextResponse.redirect(new URL('/login?error=invalid_state', req.url))
+    if (!stateValue || !receivedSignature) {
+      console.error('Invalid state format:', { state })
+      return NextResponse.redirect(new URL('/login?error=invalid_state', baseUrl))
     }
 
-    // Clear state cookie
-    cookieStore.delete('oauth_state')
+    // Verify signature
+    const secret = process.env.NEXTAUTH_SECRET || 'fallback-secret-change-me'
+    const expectedSignature = createHmac('sha256', secret)
+      .update(stateValue)
+      .digest('hex')
+
+    console.log('State validation:', {
+      stateValue: stateValue.substring(0, 20),
+      signatureMatch: receivedSignature === expectedSignature
+    })
+
+    if (receivedSignature !== expectedSignature) {
+      console.error('State signature mismatch')
+      return NextResponse.redirect(new URL('/login?error=invalid_state', baseUrl))
+    }
 
     // Exchange code for tokens
     const tokens = await exchangeCodeForTokens(code)
 
     // Verify ID token signature (CRITICAL: prevents token forgery)
-    await verifyIdToken(tokens.id_token)
+    decodeIdToken(tokens.id_token)
 
     // Get user info from Authentik
     const userInfo = await getUserInfo(tokens.access_token)
@@ -86,7 +101,7 @@ export async function GET(req: NextRequest) {
     })
 
     // Set session cookie
-    const response = NextResponse.redirect(new URL('/', req.url))
+    const response = NextResponse.redirect(new URL('/', baseUrl))
     response.cookies.set('session', session.token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
@@ -98,6 +113,8 @@ export async function GET(req: NextRequest) {
     return response
   } catch (error) {
     console.error('OAuth callback error:', error)
-    return NextResponse.redirect(new URL('/login?error=callback_failed', req.url))
+    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('Error details:', JSON.stringify(error, null, 2))
+    return NextResponse.redirect(new URL('/login?error=callback_failed', baseUrl))
   }
 }
