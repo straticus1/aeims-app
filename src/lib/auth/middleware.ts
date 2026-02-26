@@ -78,6 +78,15 @@ export async function getAuthUser(request?: NextRequest): Promise<AuthSession | 
  * Returns the authenticated user or throws an error response
  */
 export async function requireAuth(): Promise<AuthSession> {
+  // Development mode bypass (ONLY for local development)
+  // This is controlled by SKIP_AUTH=true in .env (NOT in production)
+  if (process.env.SKIP_AUTH === 'true' && process.env.NODE_ENV === 'development') {
+    // Create or get dev user
+    const devUser = await getOrCreateDevUser()
+    return devUser
+  }
+
+  // Production mode: use normal OAuth authentication
   const auth = await getAuthUser()
 
   if (!auth) {
@@ -85,4 +94,75 @@ export async function requireAuth(): Promise<AuthSession> {
   }
 
   return auth
+}
+
+/**
+ * Get or create a development user for local testing
+ * ONLY used when SKIP_AUTH=true AND NODE_ENV=development
+ */
+async function getOrCreateDevUser(): Promise<AuthSession> {
+  const DEV_EMAIL = 'dev@localhost'
+
+  // Find or create dev user
+  let user = await prisma.user.findUnique({
+    where: { email: DEV_EMAIL },
+    include: {
+      organizations: {
+        include: {
+          organization: true,
+        },
+      },
+    },
+  })
+
+  if (!user) {
+    // Create dev organization
+    const org = await prisma.organization.create({
+      data: {
+        name: 'Development Organization',
+        slug: 'dev-org',
+        description: 'Local development organization',
+      },
+    })
+
+    // Create dev user
+    user = await prisma.user.create({
+      data: {
+        email: DEV_EMAIL,
+        username: 'dev',
+        name: 'Development User',
+        displayName: 'Dev User',
+        emailVerified: true,
+        isActive: true,
+        organizations: {
+          create: {
+            organizationId: org.id,
+            role: 'OWNER',
+          },
+        },
+      },
+      include: {
+        organizations: {
+          include: {
+            organization: true,
+          },
+        },
+      },
+    })
+  }
+
+  const orgUser = user.organizations[0]
+
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      name: user.name,
+      displayName: user.displayName,
+      avatarUrl: user.avatarUrl,
+    },
+    organizationId: orgUser.organizationId,
+    role: orgUser.role,
+  }
 }

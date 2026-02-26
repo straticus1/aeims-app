@@ -8,7 +8,11 @@
     "start": "next start",
     "lint": "eslint",
     "cli": "tsx cli/aeims.ts",
-    "cli:build": "tsc cli/aeims.ts --outDir dist --esModuleInterop --resolveJsonModule --skipLibCheck"
+    "cli:build": "tsc cli/aeims.ts --outDir dist --esModuleInterop --resolveJsonModule --skipLibCheck",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
   },
   "bin": {
     "aeims": "./dist/aeims.js"
