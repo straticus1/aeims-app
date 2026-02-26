@@ -6,7 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "cli": "tsx cli/aeims.ts",
+    "cli:build": "tsc cli/aeims.ts --outDir dist --esModuleInterop --resolveJsonModule --skipLibCheck"
+  },
+  "bin": {
+    "aeims": "./dist/aeims.js"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.958.0",
@@ -20,8 +25,11 @@
     "@radix-ui/react-tabs": "^1.1.13",
     "@radix-ui/react-tooltip": "^1.2.8",
     "bcryptjs": "^3.0.3",
+    "chalk": "^5.3.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "commander": "^12.1.0",
+    "inquirer": "^10.1.0",
     "jose": "^6.1.3",
     "jsonwebtoken": "^9.0.3",
     "lucide-react": "^0.562.0",
@@ -37,6 +45,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/bcryptjs": "^2.4.6",
+    "@types/inquirer": "^9.0.7",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "@types/react": "^19",
@@ -44,6 +53,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.1",
     "tailwindcss": "^4",
+    "tsx": "^4.19.0",
     "typescript": "^5"
   }
 }

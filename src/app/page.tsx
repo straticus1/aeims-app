@@ -1,9 +1,11 @@
 "use client";
 
-import { Server, Container, Globe, Key, DollarSign, Activity, Radio, AlertTriangle } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Server, Container, Globe, Key, DollarSign, Activity, Radio, AlertTriangle, Cloud } from "lucide-react";
 import { Header } from "@/components/dashboard/header";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 // Mock data - replace with real API calls
 const mockStats = {
@@ -48,13 +50,60 @@ const alerts = [
 ];
 
 export default function Dashboard() {
+  const [selectedProvider, setSelectedProvider] = useState<string>("unified");
+  const [credentials, setCredentials] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetchCredentials();
+  }, []);
+
+  const fetchCredentials = async () => {
+    try {
+      const response = await fetch("/api/credentials");
+      if (response.ok) {
+        const data = await response.json();
+        setCredentials(data.credentials);
+      }
+    } catch (error) {
+      console.error("Error fetching credentials:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const uniqueProviders = Array.from(new Set(credentials.map(c => c.provider)));
+
   return (
     <div className="min-h-screen">
       <Header
         title="Dashboard"
         subtitle="Overview of your infrastructure"
         actions={
-          <Button>Add Resource</Button>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Cloud className="h-5 w-5 text-gray-500" />
+              <select
+                value={selectedProvider}
+                onChange={(e) => setSelectedProvider(e.target.value)}
+                className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="unified">Unified View (After Dark Systems)</option>
+                {uniqueProviders.map((provider) => (
+                  <option key={provider} value={provider}>
+                    {provider}
+                  </option>
+                ))}
+              </select>
+              <Button variant="outline" size="sm">Go</Button>
+            </div>
+            <Link href="/settings">
+              <Button variant="outline">
+                <Key className="h-4 w-4 mr-2" />
+                Manage API Keys
+              </Button>
+            </Link>
+          </div>
         }
       />
 
